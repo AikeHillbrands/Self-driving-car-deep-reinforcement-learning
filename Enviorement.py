@@ -6,13 +6,16 @@ import random as rnd
 
 view_distance = 100
 view_rays = 5
+hit_wall = -0.5
+hit_reward = 2
+finished_level = 5
 
 class env:
     def __init__(self):
         self.engine = None
         self.reset()
         self.observation_space = (view_rays,1)
-        self.action_space = (2,1)
+        self.action_space = 4 #0: do nothing 1:accelerate 2: break 3: right 4: left
 
     #inits a new world
     def new_world(self,wall = np.array(((2,7),(7,6),(11,8),(15,8),(18,12),(22,12),(18,5),(11,5),(5,3),(2,3),(2,7)),dtype="float32"), rewards = np.array(((3,5),(8,5),(13,6),(18,8),(20,11)),dtype="float32")):
@@ -21,8 +24,8 @@ class env:
 
     #inits a new agent
     def new_agent(self):
-        self.agent_dir = env.rotate(env.normalize(self.reward_gates[1]-self.reward_gates[0]),(rnd.random()-0.5)*0.3)
-        self.agent_pos = self.reward_gates[0,:]
+        self.agent_dir = env.rotate(env.normalize(self.reward_gates[-2]-self.reward_gates[-1]),(rnd.random()-0.5)*0.3)
+        self.agent_pos = self.reward_gates[-1,:]
         self.agent_speed = 0
         self.agent_rewards = [p for p in self.reward_gates]
 
@@ -62,14 +65,21 @@ class env:
 
     #moves the agent and returns the new view 
     def action(self,act,render = False):
-        self.agent_dir = env.rotate(self.agent_dir,act[1]*math.pi/3*self.agent_speed)
-        self.agent_speed += act[0]*0.01
+        maxarg = np.argmax(act)
+        if maxarg == 0:
+            self.agent_speed+=0.01
+        elif maxarg == 1:
+            self.agent_speed-=0.01
+        elif maxarg == 2:
+            self.agent_dir = env.rotate(self.agent_dir,-0.1)
+        elif maxarg == 3:
+            self.agent_dir = env.rotate(self.agent_dir,0.1)
         
         #speed cap
         if self.agent_speed>0.1:
             self.agent_speed = 0.1
-        if self.agent_speed<-0.1:
-            self.agent_speed = -0.1
+        if self.agent_speed<-0.01:
+            self.agent_speed = -0.01
 
         self.agent_pos += np.multiply(self.agent_dir,self.agent_speed)
 
@@ -77,13 +87,12 @@ class env:
         #checks if there is a reward gate in the radius of 2 and then gives a reward to the agent and removes the reward gate for further steps
         for p in self.agent_rewards:
             if env.dist (self.agent_pos,p) < 2:
-                reward += 1
+                reward += hit_reward
                 for i in range(len(self.agent_rewards)):
                     if(np.array_equal(p,self.agent_rewards[i])):
                         self.agent_rewards.pop(i)
                         break
-        
-                
+    
 
         #when render is True the enviorement is rendered
         if render:
@@ -98,9 +107,9 @@ class env:
         result = self.calculate_view()
         result.append(reward)
         if result[1] == True: #the agent crashed and is done therefore
-            result[2] = -1
+            result[2] += hit_wall
         if len(self.agent_rewards)==0: #the agent completed the level and gets an extra reward and is done
-            result[2]+=1
+            result[2] += finished_level
             result[1]= True
         return result #[observation, done, reward]
 
